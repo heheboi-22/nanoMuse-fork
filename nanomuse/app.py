@@ -447,6 +447,7 @@ class NanoMuseApp:
             workspace=s.agent.workspace,
             backend_mode=s.browser.backend,
             default_profile=s.browser.profile,
+            cdp_url=s.browser.cdp_url,
             link=self.phone,
             holds=self.holds,
         )

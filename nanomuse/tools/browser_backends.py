@@ -237,11 +237,13 @@ class PlaywrightBackend(BrowserBackend):
         headless: bool = True,
         timeout_ms: int = 30_000,
         profile: BrowserProfile | None = None,
+        cdp_url: str = "",
     ):
         self.profile_dir = profile_dir
         self.headless = headless
         self.timeout_ms = timeout_ms
         self.profile = profile or PROFILES["desktop"]
+        self.cdp_url = cdp_url
         # where a file the page offers ends up: <workspace>/downloads next to the profile
         self.downloads_dir = profile_dir.parent / "downloads"
         self._pw: Any = None
@@ -271,17 +273,23 @@ class PlaywrightBackend(BrowserBackend):
         if self._pw is None:
             self._pw = await async_playwright().start()
         if self._context is None:
-            self.profile_dir.mkdir(parents=True, exist_ok=True)
-            self._context = await self._pw.chromium.launch_persistent_context(
-                str(self.profile_dir),
-                headless=self.headless,
-                viewport=self.profile.viewport,
-                user_agent=self.profile.user_agent or None,
-                is_mobile=self.profile.mobile,
-                has_touch=self.profile.mobile,
-                device_scale_factor=self.profile.scale,
-                locale=None,
-            )
+            if self.cdp_url:
+                # attach to a real, visible Chrome (the one the live view streams):
+                # same page the user watches, no second browser
+                browser = await self._pw.chromium.connect_over_cdp(self.cdp_url, timeout=self.timeout_ms)
+                self._context = browser.contexts[0] if browser.contexts else await browser.new_context()
+            else:
+                self.profile_dir.mkdir(parents=True, exist_ok=True)
+                self._context = await self._pw.chromium.launch_persistent_context(
+                    str(self.profile_dir),
+                    headless=self.headless,
+                    viewport=self.profile.viewport,
+                    user_agent=self.profile.user_agent or None,
+                    is_mobile=self.profile.mobile,
+                    has_touch=self.profile.mobile,
+                    device_scale_factor=self.profile.scale,
+                    locale=None,
+                )
             self._context.set_default_timeout(self.timeout_ms)
             await self._install_url_guard()
         pages = self._context.pages

@@ -9,6 +9,7 @@ import type { BrowserEvent } from "../types";
 import { cx } from "../util";
 import { HoldStrip, holdLine } from "./Cards";
 import { Sheet } from "./Sheet";
+import { VoxlEmbed } from "./VoxlEmbed";
 
 /** How often the picture is refreshed while the person has the page (ms). */
 const LIVE_POLL_MS = 1000;
@@ -233,20 +234,7 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
             </button>
           </div>
         ) : control ? (
-          <img
-            ref={imgRef}
-            key={event.frame}
-            src={frameUrl(thread, event.frame)}
-            alt={event.title || host}
-            onError={() => setGone(true)}
-            onClick={onTap}
-            onWheel={onWheel}
-            onKeyDown={onKey}
-            tabIndex={control ? 0 : undefined}
-            aria-describedby={control ? hintId : undefined}
-            draggable={false}
-            className={cx("block w-full select-none", control ? "cursor-crosshair" : "")}
-          />
+          <VoxlEmbed />
         ) : (
           <LiveImage
             thread={thread}

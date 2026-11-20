@@ -183,6 +183,8 @@ class Browser(BaseTool):
     link: Any = None
     # the starting profile: "desktop" for Playwright, the phone's own for the device
     default_profile: str = ""
+    # attach to a real Chrome over CDP instead of launching a headless browser
+    cdp_url: str = ""
     # receives a BrowserFrame after every action; set by the app
     on_frame: Callable[[BrowserFrame], None] | None = None
     frame_quality: int = 55
@@ -247,6 +249,7 @@ class Browser(BaseTool):
                 headless=self.headless,
                 timeout_ms=self.timeout_ms,
                 profile=profile_named(self.default_profile or "desktop"),
+                cdp_url=self.cdp_url,
             )
         self._backend = backend
         return backend

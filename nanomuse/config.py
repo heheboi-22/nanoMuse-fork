@@ -475,6 +475,10 @@ class BrowserSettings(BaseModel):
     backend: Literal["auto", "playwright", "device"] = "auto"
     # the starting user agent + viewport: "desktop", "mobile", or "" for the backend's own
     profile: Literal["", "desktop", "mobile"] = ""
+    # attach to a real Chrome over CDP (e.g. "http://127.0.0.1:9222") instead of launching
+    # a headless one: the page the agent drives is the one the user watches and can take
+    # over in person. Empty = launch headless as before.
+    cdp_url: str = ""
 
 
 class GUISettings(BaseModel):
