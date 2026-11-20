@@ -76,7 +76,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from nanomuse.avatar.studio import StudioError
@@ -1887,6 +1887,39 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
             raise HTTPException(404, "no live frame yet")
         return Response(content=jpeg, media_type="image/jpeg",
                         headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/browser/{thread_id}/live.mjpeg", dependencies=dep_or_signed)
+    async def browser_live_mjpeg(thread_id: str) -> Response:
+        """The live view as a motion-JPEG stream: Chrome's screencast, pushed here."""
+        _thread_or_404(thread_id)
+        ui = svc.ui
+        boundary = "nanomuse-frame"
+
+        async def frames():  # noqa: ANN202 - Starlette StreamingResponse
+            last: bytes | None = None
+            idle = 0
+            while True:
+                jpeg = ui.browser_live.get(thread_id)
+                if jpeg is not None and jpeg is not last:
+                    last = jpeg
+                    idle = 0
+                    yield (
+                        f"--{boundary}\r\nContent-Type: image/jpeg\r\n"
+                        f"Content-Length: {len(jpeg)}\r\n\r\n".encode()
+                        + jpeg
+                        + b"\r\n"
+                    )
+                else:
+                    idle += 1
+                    if idle > 600:  # ~60s without a paint: stop, the client reopens
+                        return
+                await asyncio.sleep(0.1)
+
+        return StreamingResponse(
+            frames(),
+            media_type=f"multipart/x-mixed-replace; boundary={boundary}",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
     @app.post("/api/browser/{thread_id}/live", dependencies=dep)
     async def browser_live_set(thread_id: str, body: dict[str, Any]) -> dict[str, Any]:

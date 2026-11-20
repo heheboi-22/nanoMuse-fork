@@ -252,6 +252,7 @@ class PlaywrightBackend(BrowserBackend):
         self._url_guard: Callable[[str], Awaitable[bool]] | None = None
         self._guard_installed = False
         self._blocked_url = ""
+        self._cdp: Any = None
 
     @staticmethod
     def available() -> bool:
@@ -296,6 +297,69 @@ class PlaywrightBackend(BrowserBackend):
         self._page = pages[0] if pages else await self._context.new_page()
         self._page.set_default_timeout(self.timeout_ms)
         self._page.on("download", self._on_download)
+
+    # ---------------------------------------------------------------- live screencast
+    async def screencast_start(self, on_frame, *, quality: int = 70, max_width: int = 1440,
+                               every_nth_frame: int = 1) -> None:
+        """Push JPEG frames to `on_frame(bytes)` whenever the page paints."""
+        await self.ensure()
+        if self._cdp is not None:
+            return
+        cdp = await self._context.new_cdp_session(self._page)
+        self._cdp = cdp
+
+        def _on_frame(params: Any) -> None:
+            data = params.get("data", "")
+            if data:
+                import base64
+                try:
+                    on_frame(base64.b64decode(data))
+                except Exception:  # noqa: BLE001
+                    pass
+            # ack so Chrome keeps sending; without it the stream stalls
+            try:
+                import asyncio
+                asyncio.get_event_loop().create_task(
+                    cdp.send("Page.screencastFrameAck", {"sessionId": params.get("sessionId", 0)})
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        cdp.on("Page.screencastFrame", _on_frame)
+        await cdp.send("Page.startScreencast", {
+            "format": "jpeg",
+            "quality": quality,
+            "maxWidth": max_width,
+            "maxHeight": int(max_width * 9 / 16),
+            "everyNthFrame": every_nth_frame,
+        })
+
+    async def screencast_stop(self) -> None:
+        if self._cdp is None:
+            return
+        try:
+            await self._cdp.send("Page.stopScreencast")
+        except Exception:  # noqa: BLE001
+            pass
+        self._cdp = None
+
+    # ------------------------------------------------------------------ native input
+    async def click_at(self, x: float, y: float, button: str = "left") -> None:
+        await self.ensure()
+        await self._page.mouse.click(x, y, button=button)
+
+    async def scroll_at(self, x: float, y: float, dx: float, dy: float) -> None:
+        await self.ensure()
+        await self._page.mouse.move(x, y)
+        await self._page.mouse.wheel(dx, dy)
+
+    async def type_text(self, text: str) -> None:
+        await self.ensure()
+        await self._page.keyboard.type(text)
+
+    async def press_key(self, key: str) -> None:
+        await self.ensure()
+        await self._page.keyboard.press(key)
 
     def _on_download(self, download: Any) -> None:
         async def save() -> None:
