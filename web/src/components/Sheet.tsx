@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
 import { useT } from "../i18n";
 import { useFocusTrap } from "./useFocusTrap";
 
@@ -36,7 +36,16 @@ export function Sheet({
   }, [open, onClose]);
 
   const right = variant === "right";
-  const wide = typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+  // reactive: re-renders when the viewport crosses the breakpoint
+  const wide = useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia("(min-width: 1024px)");
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia("(min-width: 1024px)").matches,
+    () => false,
+  );
   const docked = right && wide;
   if (!open) return null;
   if (docked) {
@@ -45,7 +54,7 @@ export function Sheet({
         ref={panel}
         role="dialog"
         aria-labelledby={title ? titleId : undefined}
-        className="sheet-in relative z-40 flex h-dvh w-[440px] max-w-[44vw] flex-col bg-surface shadow-2xl border-l border-border"
+        className="sheet-in fixed inset-y-0 right-0 z-40 flex w-[440px] max-w-[46vw] flex-col bg-surface shadow-2xl border-l border-border"
       >
         <div className="flex items-center gap-3 px-5 pt-4 pb-2 border-b border-border/60">
           <div id={titleId} className="flex-1 font-semibold text-[17px] mt-1">{title}</div>
