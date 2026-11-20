@@ -4,8 +4,9 @@
  * streamed desktop (XTEST over WebSocket), so take-over is the real page at 60fps.
  */
 export function voxlUrl(): string {
-  // same-origin proxy served by the runtime (CSS-injected, no cross-origin issues)
-  return `/voxl?token=voxltest`;
+  // direct: voxl's own origin serves client.js/worker.js AND the /ws WebSocket.
+  // The proxied /voxl path broke the ws handshake (different origin, wrong path).
+  return "https://voxl.nadif.dev/?token=voxltest";
 }
 
 export function VoxlEmbed({ compact }: { compact?: boolean }) {

@@ -1871,9 +1871,12 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"voxl proxy: {str(exc)[:120]}") from exc
 
-    @app.get("/voxl", dependencies=dep_or_signed)
-    @app.get("/voxl/{path:path}", dependencies=dep_or_signed)
+    @app.get("/voxl")
+    @app.get("/voxl/{path:path}")
     async def voxl_ui(request: Request, path: str = ""):
+        """Static voxl UI unauthenticated (it holds no secrets); the live WebSocket
+        it opens still carries its own token, and input is gated by the app's
+        take-over hold. HTML gets the status-hiding style injected."""
         return await _voxl_proxy(request, path or "")
 
     @app.get("/api/browser/{thread_id}/live.jpg", dependencies=dep)
