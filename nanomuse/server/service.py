@@ -1473,7 +1473,6 @@ class MuseService:
         if tool is not None:
             tool.on_frame = self.ui.on_browser_frame
             tool.link = self.phone
-            self.ui.app_browser_add_viewer = tool.add_live_viewer
 
     def browser_backend(self) -> str:
         """Where the browser renders now: "playwright", "device", or "" for nowhere."""
@@ -1481,67 +1480,9 @@ class MuseService:
         return tool.backend_kind if tool is not None else ""
 
     def browser_live_frame(self, thread: str) -> bytes | None:
-        """The newest live-view screenshot (the web sidebar's stream)."""
-        return self.ui.browser_live_frame(thread)
+        """Gone: the live view is KasmVNC on display :1, not a server-side screenshot."""
+        return None
 
-    def browser_live_viewers(self, thread: str, delta: int) -> int:
-        """A sidebar attached or detached; returns the watcher count."""
-        tool = self.browser
-        if tool is None:
-            return 0
-        try:
-            return tool.add_live_viewer(delta)
-        except Exception as exc:  # noqa: BLE001 - the loop is best-effort
-            logger.debug("browser live viewer: {}", exc)
-            return tool.live_viewers()
-
-    async def browser_control(self, thread: str, body: dict[str, Any]) -> dict[str, Any]:
-        """The user takes over the agent's browser from the app (tap, type, open a URL).
-
-        ``take_over`` puts a hold on (contract C1): the agent's next browser action waits
-        until ``handed_back`` — the Done button — takes it off. Both work whether or not
-        a page is open; the other actions need one."""
-        action = str(body.get("action") or "")
-        if action not in (
-            "click",
-            "type",
-            "key",
-            "scroll",
-            "back",
-            "navigate",
-            "look",
-            "take_over",
-            "handed_back",
-        ):
-            raise ValueError(f"unknown browser action '{action}'")
-        tool = self.browser
-        hold: dict[str, Any] | None = None
-        if action == "take_over":
-            hold = self.app.holds.open(thread, "browser", by="user", reason="").to_event()
-        elif action == "handed_back":
-            released = self.app.holds.release(thread, "browser")
-            hold = released.to_event() if released is not None else None
-        if action in ("take_over", "handed_back") and (tool is None or not tool.open):
-            return {"url": "", "title": "", "hold": hold}
-        if tool is None:
-            raise LookupError("the browser tool is not enabled")
-        if action not in ("look", "navigate") and not tool.open:
-            raise LookupError("the browser is not open right now; open a URL first")
-        result = await tool.user_action(
-            action,
-            thread,
-            x=body.get("x"),
-            y=body.get("y"),
-            text=body.get("text"),
-            key=body.get("key"),
-            dy=body.get("dy"),
-            url=body.get("url"),
-        )
-        if hold is not None:
-            result["hold"] = hold
-        return result
-
-    # ------------------------------------------------------------------ holds (C1)
     def holds_view(self) -> list[dict[str, Any]]:
         return self.app.holds.view()
 

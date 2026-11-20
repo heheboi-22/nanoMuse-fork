@@ -8,7 +8,7 @@ import type { BrowserEvent } from "../types";
 import { cx } from "../util";
 import { HoldStrip, holdLine } from "./Cards";
 import { Sheet } from "./Sheet";
-import { LiveBrowser } from "./LiveBrowser";
+import { LiveVnc } from "./LiveVnc";
 
 /** How often the picture is refreshed while the person has the page (ms). */
 const LIVE_POLL_MS = 1000;
@@ -174,27 +174,9 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
               {t("Look again")}
             </button>
           </div>
-        ) : control ? (
-          <div className="h-full min-h-0">
-            <LiveBrowser
-              thread={thread}
-              title={event.title || host}
-              interactive
-              onTap={(x, y) => void act({ action: "click", x, y })}
-              onScroll={(dy) => void act({ action: "scroll", dy })}
-              onKey={(key, text) =>
-                void act(text ? { action: "type", text } : { action: "key", key })
-              }
-            />
-          </div>
         ) : (
-          <div className="relative cursor-pointer" onClick={takeOver}>
-            <LiveBrowser thread={thread} title={event.title || host} />
-            <div className="absolute inset-0 flex items-end justify-center pb-3">
-              <span className="rounded-full bg-black/60 px-3 py-1.5 text-[12px] font-medium text-white">
-                {t("Live · click to take over")}
-              </span>
-            </div>
+          <div className="h-full min-h-0">
+            <LiveVnc />
           </div>
         )}
         {busy && busy !== "look" && (

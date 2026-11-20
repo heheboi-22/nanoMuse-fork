@@ -324,75 +324,9 @@ class Browser(BaseTool):
         return self._live_viewers
 
     def add_live_viewer(self, delta: int) -> int:
-        """A web-console sidebar attached (+1) or detached (-1); starts/stops the loop."""
+        """Kept for the API shape; the view is VNC now, so there is no frame loop."""
         self._live_viewers = max(0, self._live_viewers + delta)
-        if self._live_viewers > 0:
-            self._ensure_live_loop()
-        else:
-            self._stop_live_loop()
         return self._live_viewers
-
-    def _ensure_live_loop(self) -> None:
-        if self._live_task is not None and not self._live_task.done():
-            return
-        self._live_task = spawn(self._live_loop(), "browser live view")
-
-    def _stop_live_loop(self) -> None:
-        task = self._live_task
-        if task is not None and not task.done():
-            task.cancel()
-        self._live_task = None
-
-    async def _live_loop(self) -> None:
-        """Stream the page while someone watches: Chrome's own screencast, not snapshots."""
-        backend = None
-        try:
-            while self._live_viewers > 0:
-                try:
-                    backend = self._backend
-                    if backend is None or not backend.open:
-                        await asyncio.sleep(0.4)
-                        continue
-                    if not hasattr(backend, "screencast_start"):
-                        await asyncio.sleep(0.5)
-                        continue
-                    url = await backend.url()
-                    title = await backend.title()
-
-                    def on_frame(jpeg: bytes, url=url, title=title) -> None:
-                        self.on_frame(
-                            BrowserFrame(
-                                url,
-                                title,
-                                "Live view",
-                                jpeg,
-                                False,
-                                None,
-                                backend=backend.kind,
-                                width=backend.profile.width,
-                                height=backend.profile.height,
-                            )
-                        )
-
-                    await backend.screencast_start(on_frame)
-                    # keep the stream alive; Chrome decides the frame rate
-                    while self._live_viewers > 0 and backend.open:
-                        await asyncio.sleep(0.5)
-                    await backend.screencast_stop()
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:  # noqa: BLE001 - a closed page or a slow site
-                    logger.debug("browser live view: {}", exc)
-                    await asyncio.sleep(1.0)
-            if backend is not None and hasattr(backend, "screencast_stop"):
-                await backend.screencast_stop()
-        except asyncio.CancelledError:
-            if backend is not None and hasattr(backend, "screencast_stop"):
-                try:
-                    await backend.screencast_stop()
-                except Exception:  # noqa: BLE001
-                    pass
-            raise
 
     async def _label(self, backend: BrowserBackend, index: int) -> str:
         try:

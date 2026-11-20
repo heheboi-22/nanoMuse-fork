@@ -125,7 +125,6 @@ class WebUI:
         # card of the current run, which is updated in place frame after frame
         self.browser_frames: dict[str, OrderedDict[str, bytes]] = {}
         # the newest live-view screenshot per thread (the sidebar's stream); not a card frame
-        self.browser_live: dict[str, bytes] = {}
         self._browser_card: dict[str, str] = {}
         # the hands on this computer: the card of the current task, updated step by step
         self._hands_card: dict[str, str] = {}
@@ -167,10 +166,6 @@ class WebUI:
     def on_browser_frame(self, frame: BrowserFrame) -> None:
         """A new picture of the browser: keep it, and show/update the browser card."""
         thread = frame.thread or self.thread()
-        if frame.action == "Live view" and not frame.by_user:
-            # the sidebar's live stream: the newest picture only, no card, no timeline noise
-            self.browser_live[thread] = frame.jpeg
-            return
         frames = self.browser_frames.setdefault(thread, OrderedDict())
         fid = new_id("f")
         frames[fid] = frame.jpeg
@@ -279,18 +274,9 @@ class WebUI:
         frames = self.browser_frames.get(thread)
         return frames.get(fid) if frames is not None else None
 
-    def browser_live_frame(self, thread: str) -> bytes | None:
-        """The newest live-view picture (the sidebar's stream), or None."""
-        return self.browser_live.get(thread)
-
-    def browser_live_viewers(self, thread: str, delta: int) -> int:
-        """One more (delta=1) or one fewer (-1) sidebar watching this thread's browser."""
-        if delta > 0:
-            self.browser_live[thread] = self.browser_live.get(thread) or b""
-        return self.app_browser_add_viewer(thread, delta)
-
-    # wired by the service: the browser tool's viewer counter (None-safe)
-    app_browser_add_viewer: Any = staticmethod(lambda _thread, _delta: 0)
+    def browser_frame(self, thread: str, fid: str) -> bytes | None:
+        frames = self.browser_frames.get(thread)
+        return frames.get(fid) if frames is not None else None
 
     # ------------------------------------------------------------------ holds (C1)
     def on_hold(self, event: dict[str, Any]) -> None:

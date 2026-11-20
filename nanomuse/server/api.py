@@ -1847,87 +1847,94 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
             headers={"Cache-Control": "private, max-age=86400, immutable"},
         )
 
-    # ------------------------------------------------------------------ voxl live view
-    _VOXL_TARGET = "http://172.17.0.1:8445"
+    # ------------------------------------------------------------------ VNC (live desktop)
+    # KasmVNC on display :1 is the real screen: Chrome runs there, the agent drives it
+    # over CDP, and the user's pointer/keyboard events arrive as X events. Nothing here
+    # takes a screenshot.
+    _VNC_HTTP = "https://172.17.0.1:8443"
+    _VNC_WS = "wss://172.17.0.1:8443/websockify"
+    _VNC_AUTH = "Basic " + __import__("base64").b64encode(b"aorus:aorusvnc2026").decode()
 
-    async def _voxl_proxy(request: Request, path: str) -> Response:
-        """Reverse-proxy voxl's UI/media and inject CSS hiding the stale status text."""
+    @app.get("/vnc")
+    @app.get("/vnc/{path:path}")
+    async def vnc_http(request: Request, path: str = ""):
+        """KasmVNC's client files, proxied so the iframe stays same-origin."""
         import httpx
-        target = f"{_VOXL_TARGET}/{path}"
+
+        target = f"{_VNC_HTTP}/{path or 'vnc.html'}"
         if request.url.query:
             target += "?" + request.url.query
-        headers = {k: v for k, v in request.headers.items()
-                   if k.lower() in ("accept", "accept-encoding", "range", "if-none-match")}
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                up = client.build_request("GET", target, headers=headers)
+            async with httpx.AsyncClient(timeout=30, verify=False) as client:
+                up = client.build_request(
+                    "GET", target,
+                    headers={"Authorization": _VNC_AUTH,
+                             "Accept": request.headers.get("accept", "*/*")},
+                )
                 resp = await client.send(up)
-                body = resp.content
                 ct = resp.headers.get("content-type", "application/octet-stream")
-                if "text/html" in ct:
-                    body = body.replace(b"<head>", b"<head><style>#status{display:none!important}</style>", 1)
-                    ct = "text/html; charset=utf-8"
-                return Response(content=body, media_type=ct)
+                return Response(content=resp.content, media_type=ct,
+                                headers={"Cache-Control": "no-store"})
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(502, f"voxl proxy: {str(exc)[:120]}") from exc
+            raise HTTPException(502, f"vnc proxy: {str(exc)[:120]}") from exc
 
-    @app.get("/voxl")
-    @app.get("/voxl/{path:path}")
-    async def voxl_ui(request: Request, path: str = ""):
-        """Static voxl UI unauthenticated (it holds no secrets); the live WebSocket
-        it opens still carries its own token, and input is gated by the app's
-        take-over hold. HTML gets the status-hiding style injected."""
-        return await _voxl_proxy(request, path or "")
+    @app.websocket("/websockify")
+    @app.websocket("/vnc/websockify")
+    async def vnc_ws(websocket: WebSocket) -> None:
+        """The RFB stream itself: pump bytes both ways between the app and KasmVNC."""
+        import ssl
+        import websockets
 
-    @app.get("/api/browser/{thread_id}/live.jpg", dependencies=dep)
-    async def browser_live_frame(thread_id: str) -> Response:
-        """The newest live-view picture for the sidebar; 404 when none yet."""
-        jpeg = svc.browser_live_frame(thread_id)
-        if jpeg is None:
-            raise HTTPException(404, "no live frame yet")
-        return Response(content=jpeg, media_type="image/jpeg",
-                        headers={"Cache-Control": "no-store"})
+        await websocket.accept(subprotocol="binary")
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            async with websockets.connect(
+                _VNC_WS,
+                subprotocols=["binary"],
+                ssl=ctx,
+                max_size=None,
+                open_timeout=10,
+                additional_headers={
+                    "Origin": "https://vnc.nadif.dev",
+                    "Host": "vnc.nadif.dev",
+                },
+            ) as upstream:
 
-    @app.get("/api/browser/{thread_id}/live.mjpeg", dependencies=dep_or_signed)
-    async def browser_live_mjpeg(thread_id: str) -> Response:
-        """The live view as a motion-JPEG stream: Chrome's screencast, pushed here."""
-        _thread_or_404(thread_id)
-        ui = svc.ui
-        boundary = "nanomuse-frame"
+                async def to_vnc() -> None:
+                    while True:
+                        msg = await websocket.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            return
+                        data = msg.get("bytes") or (msg.get("text") or "").encode()
+                        await upstream.send(data)
 
-        async def frames():  # noqa: ANN202 - Starlette StreamingResponse
-            last: bytes | None = None
-            idle = 0
-            while True:
-                jpeg = ui.browser_live.get(thread_id)
-                if jpeg is not None and jpeg is not last:
-                    last = jpeg
-                    idle = 0
-                    yield (
-                        f"--{boundary}\r\nContent-Type: image/jpeg\r\n"
-                        f"Content-Length: {len(jpeg)}\r\n\r\n".encode()
-                        + jpeg
-                        + b"\r\n"
-                    )
-                else:
-                    idle += 1
-                    if idle > 600:  # ~60s without a paint: stop, the client reopens
-                        return
-                await asyncio.sleep(0.1)
+                async def to_client() -> None:
+                    async for data in upstream:
+                        if isinstance(data, str):
+                            await websocket.send_text(data)
+                        else:
+                            await websocket.send_bytes(data)
 
-        return StreamingResponse(
-            frames(),
-            media_type=f"multipart/x-mixed-replace; boundary={boundary}",
-            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
-        )
+                tasks = [asyncio.create_task(to_vnc()), asyncio.create_task(to_client())]
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for task in pending:
+                    task.cancel()
+        except Exception as exc:  # noqa: BLE001 - a closed tab ends the bridge quietly
+            logger.debug("vnc ws bridge ended: {}", exc)
+        finally:
+            try:
+                await websocket.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     @app.post("/api/browser/{thread_id}/live", dependencies=dep)
     async def browser_live_set(thread_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        """A web-console sidebar attached ({on: true}) or detached ({on: false})."""
+        """The sidebar opened or closed its VNC view. Nothing to start server-side:
+        KasmVNC streams display :1 by itself; the counter is only for the UI."""
         _thread_or_404(thread_id)
-        on = bool(body.get("on"))
-        viewers = svc.browser_live_viewers(thread_id, 1 if on else -1)
-        return {"viewers": viewers}
+        return {"viewers": 1 if body.get("on") else 0}
 
     @app.post("/api/browser/{thread_id}/control", dependencies=dep)
     async def browser_control(thread_id: str, body: BrowserControlBody) -> dict[str, Any]:
