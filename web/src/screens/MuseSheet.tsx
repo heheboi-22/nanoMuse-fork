@@ -109,7 +109,7 @@ export function MuseSheet({ open, onClose }: { open: boolean; onClose: () => voi
   ];
 
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} variant="right">
       <div className="relative flex flex-col items-center px-1 pb-3 text-center">
         {/* the phone's top-right button: the face on a card, to share */}
         <button

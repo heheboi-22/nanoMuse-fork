@@ -11,12 +11,17 @@ export function Sheet({
   title,
   children,
   footer,
+  variant = "center",
 }: {
   open: boolean;
   onClose: () => void;
   title?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  /** "center": bottom sheet on phones, centered dialog on wide screens (default).
+   *  "right": docked right panel on wide screens (the chat stays visible); the
+   *  bottom sheet below 1024px. */
+  variant?: "center" | "right";
 }) {
   const t = useT();
   const panel = useRef<HTMLDivElement>(null);
@@ -30,7 +35,34 @@ export function Sheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const right = variant === "right";
+  const wide = typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+  const docked = right && wide;
   if (!open) return null;
+  if (docked) {
+    return (
+      <div
+        ref={panel}
+        role="dialog"
+        aria-labelledby={title ? titleId : undefined}
+        className="sheet-in relative z-40 flex h-dvh w-[440px] max-w-[44vw] flex-col bg-surface shadow-2xl border-l border-border"
+      >
+        <div className="flex items-center gap-3 px-5 pt-4 pb-2 border-b border-border/60">
+          <div id={titleId} className="flex-1 font-semibold text-[17px] mt-1">{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("Close")}
+            className="p-2 -mr-2 rounded-full text-muted hover:bg-surface-2"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-4">{children}</div>
+        {footer && <div className="px-5 pt-2 pb-4 safe-bottom border-t border-border">{footer}</div>}
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
       <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" onClick={onClose} />
