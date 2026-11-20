@@ -1,8 +1,7 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CornerDownLeft, Globe, Hand, Loader2, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { androidApp, nativeTakeOver } from "../android";
-import { api, frameUrl, getToken } from "../api";
-import { signedParams } from "../ticket";
+import { api, frameUrl } from "../api";
 import { useT } from "../i18n";
 import { useStore } from "../store";
 import type { BrowserEvent } from "../types";
@@ -13,64 +12,6 @@ import { VoxlEmbed } from "./VoxlEmbed";
 
 /** How often the picture is refreshed while the person has the page (ms). */
 const LIVE_POLL_MS = 1000;
-/** How fast the live sidebar's stream picture is refetched while it is open (ms). */
-const LIVE_SIDEBAR_MS = 450;
-
-function liveUrl(thread: string): string {
-  const token = getToken();
-  const q = token ? `?${signedParams(token, `/api/browser/${thread}/live.jpg`)}&cb=${Date.now()}` : `?cb=${Date.now()}`;
-  return `/api/browser/${encodeURIComponent(thread)}/live.jpg${q}`;
-}
-
-/** An image that keeps re-fetching the newest live frame (the sidebar's stream). */
-function LiveImage({ thread, className, onClick, onWheel, onKeyDown, tabIndex, alt, draggable }: {
-  thread: string;
-  className?: string;
-  onClick?: (e: React.MouseEvent<HTMLImageElement>) => void;
-  onWheel?: (e: React.WheelEvent<HTMLImageElement>) => void;
-  onKeyDown?: (e: React.KeyboardEvent<HTMLImageElement>) => void;
-  tabIndex?: number;
-  alt: string;
-  draggable?: boolean;
-}) {
-  const [ok, setOk] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    const tick = () => {
-      if (document.hidden || !alive) return;
-      const img = new Image();
-      img.onload = () => {
-        if (!alive) return;
-        setOk(true);
-        const shown = ref.current;
-        if (shown) shown.src = img.src;
-      };
-      img.src = liveUrl(thread);
-    };
-    tick();
-    const timer = window.setInterval(tick, LIVE_SIDEBAR_MS);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread]);
-  const ref = useRef<HTMLImageElement>(null);
-  return (
-    <img
-      ref={ref}
-      src={liveUrl(thread)}
-      alt={alt}
-      onError={() => setOk(false)}
-      onClick={onClick}
-      onWheel={onWheel}
-      onKeyDown={onKeyDown}
-      tabIndex={tabIndex}
-      draggable={draggable ?? false}
-      className={cx("block w-full select-none", ok ? className : "opacity-0", !ok && "absolute inset-0")}
-    />
-  );
-}
 
 /**
  * Watch the agent's browser, or take over. The frame is the latest one the server has
@@ -236,12 +177,14 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
         ) : control ? (
           <VoxlEmbed />
         ) : (
-          <LiveImage
-            thread={thread}
-            alt={event.title || host}
-            className="cursor-pointer"
-            onClick={takeOver}
-          />
+          <div className="relative cursor-pointer" onClick={takeOver}>
+            <VoxlEmbed compact />
+            <div className="absolute inset-0 flex items-end justify-center pb-3">
+              <span className="rounded-full bg-black/60 px-3 py-1.5 text-[12px] font-medium text-white">
+                {t("Live · click to take over")}
+              </span>
+            </div>
+          </div>
         )}
         {busy && busy !== "look" && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">

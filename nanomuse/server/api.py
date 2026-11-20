@@ -1847,6 +1847,35 @@ def create_app(settings: Settings, service: MuseService | None = None) -> FastAP
             headers={"Cache-Control": "private, max-age=86400, immutable"},
         )
 
+    # ------------------------------------------------------------------ voxl live view
+    _VOXL_TARGET = "http://172.17.0.1:8445"
+
+    async def _voxl_proxy(request: Request, path: str) -> Response:
+        """Reverse-proxy voxl's UI/media and inject CSS hiding the stale status text."""
+        import httpx
+        target = f"{_VOXL_TARGET}/{path}"
+        if request.url.query:
+            target += "?" + request.url.query
+        headers = {k: v for k, v in request.headers.items()
+                   if k.lower() in ("accept", "accept-encoding", "range", "if-none-match")}
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                up = client.build_request("GET", target, headers=headers)
+                resp = await client.send(up)
+                body = resp.content
+                ct = resp.headers.get("content-type", "application/octet-stream")
+                if "text/html" in ct:
+                    body = body.replace(b"<head>", b"<head><style>#status{display:none!important}</style>", 1)
+                    ct = "text/html; charset=utf-8"
+                return Response(content=body, media_type=ct)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"voxl proxy: {str(exc)[:120]}") from exc
+
+    @app.get("/voxl", dependencies=dep_or_signed)
+    @app.get("/voxl/{path:path}", dependencies=dep_or_signed)
+    async def voxl_ui(request: Request, path: str = ""):
+        return await _voxl_proxy(request, path or "")
+
     @app.get("/api/browser/{thread_id}/live.jpg", dependencies=dep)
     async def browser_live_frame(thread_id: str) -> Response:
         """The newest live-view picture for the sidebar; 404 when none yet."""
