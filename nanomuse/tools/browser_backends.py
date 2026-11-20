@@ -298,6 +298,21 @@ class PlaywrightBackend(BrowserBackend):
         self._page.set_default_timeout(self.timeout_ms)
         self._page.on("download", self._on_download)
 
+    async def viewport_size(self) -> tuple[int, int]:
+        """The page's real viewport. With connect_over_cdp this is the visible window,
+        which need not match the profile's nominal size."""
+        try:
+            await self.ensure()
+            size = await self._page.evaluate(
+                "() => ({ w: window.innerWidth, h: window.innerHeight })"
+            )
+            w, h = int(size.get("w") or 0), int(size.get("h") or 0)
+            if w > 0 and h > 0:
+                return w, h
+        except Exception:  # noqa: BLE001 - a closed page falls back to the profile
+            pass
+        return self.profile.width, self.profile.height
+
     # ---------------------------------------------------------------- live screencast
     async def screencast_start(self, on_frame, *, quality: int = 70, max_width: int = 1440,
                                every_nth_frame: int = 1) -> None:

@@ -713,12 +713,16 @@ class Browser(BaseTool):
         async with self.lock:
             backend = self._pick_backend()
             await backend.ensure()
-            vp = backend.profile.viewport
+            # the frame is the page's real viewport (a CDP-attached window can differ
+            # from the profile's nominal size), so clicks scale by what is on screen
+            vp_w, vp_h = backend.profile.width, backend.profile.height
+            if hasattr(backend, "viewport_size"):
+                vp_w, vp_h = await backend.viewport_size()
             if action == "click":
                 if x is None or y is None:
                     raise ValueError("click needs x and y")
-                px = min(max(float(x), 0.0), 1.0) * vp["width"]
-                py = min(max(float(y), 0.0), 1.0) * vp["height"]
+                px = min(max(float(x), 0.0), 1.0) * vp_w
+                py = min(max(float(y), 0.0), 1.0) * vp_h
                 await backend.click_at(px, py)
                 await backend.settle(self.timeout_ms)
                 caption, note = "You tapped the page", f"clicked at ({int(px)}, {int(py)})"

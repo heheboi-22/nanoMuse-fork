@@ -165,7 +165,7 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
           <HoldStrip hold={hold} compact />
         </div>
       )}
-      <div className={cx("relative overflow-hidden rounded-2xl border border-border bg-surface-2", control && "ring-2 ring-accent")}>
+      <div className={cx("relative overflow-hidden rounded-2xl border border-border bg-surface-2", control && "h-[calc(100dvh-300px)] ring-2 ring-accent")}>
         {gone ? (
           <div className="flex aspect-[16/10] flex-col items-center justify-center gap-1 text-muted">
             <Globe size={24} />
@@ -175,13 +175,18 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
             </button>
           </div>
         ) : control ? (
-          <LiveBrowser
-            thread={thread}
-            title={event.title || host}
-            interactive
-            onTap={(x, y) => void act({ action: "click", x, y })}
-            onScroll={(dy) => void act({ action: "scroll", dy })}
-          />
+          <div className="h-full min-h-0">
+            <LiveBrowser
+              thread={thread}
+              title={event.title || host}
+              interactive
+              onTap={(x, y) => void act({ action: "click", x, y })}
+              onScroll={(dy) => void act({ action: "scroll", dy })}
+              onKey={(key, text) =>
+                void act(text ? { action: "type", text } : { action: "key", key })
+              }
+            />
+          </div>
         ) : (
           <div className="relative cursor-pointer" onClick={takeOver}>
             <LiveBrowser thread={thread} title={event.title || host} />
@@ -200,7 +205,10 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
       </div>
       <div className="mt-2 flex items-center justify-between text-[12px] text-muted">
         <span className="truncate">{event.url}</span>
-        <span className="shrink-0 ml-2">{event.frames === 1 ? t("1 frame") : t("{n} frames", { n: event.frames })}</span>
+        <span className="shrink-0 ml-2 flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          {t("Live")}
+        </span>
       </div>
       {control && (
         <div className="mt-3 rounded-2xl bg-accent/8 px-3.5 py-2.5 text-[13px] leading-snug">
@@ -218,7 +226,7 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
       <aside
         role="complementary"
         aria-label={t("Browser")}
-        className="fixed right-0 top-0 z-40 flex h-dvh w-[420px] max-w-[42vw] flex-col border-l border-border bg-surface shadow-2xl"
+        className="fixed right-0 top-0 z-40 flex h-dvh w-[560px] max-w-[52vw] flex-col border-l border-border bg-surface shadow-2xl"
       >
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 border-b border-border/60">
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -239,7 +247,7 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 py-3">{viewer}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{viewer}</div>
         <div className="px-4 pt-2 pb-4 safe-bottom border-t border-border/60">
           {control ? (
             <div className="space-y-2">
@@ -511,7 +519,10 @@ export function BrowserViewer({ thread, eventId, onClose }: { thread: string; ev
       </div>
       <div className="mt-2 flex items-center justify-between text-[12px] text-muted">
         <span className="truncate">{event.url}</span>
-        <span className="shrink-0 ml-2">{event.frames === 1 ? t("1 frame") : t("{n} frames", { n: event.frames })}</span>
+        <span className="shrink-0 ml-2 flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          {t("Live")}
+        </span>
       </div>
       {control && (
         <div className="mt-3 rounded-2xl bg-accent/8 px-3.5 py-2.5 text-[13px] leading-snug">

@@ -7,6 +7,7 @@
  * same fractional point, keys = CDP keyboard, so typing lands on the page itself.
  */
 import { useEffect, useRef, useState } from "react";
+import { cx } from "../util";
 import type React from "react";
 import { getToken } from "../api";
 import { signedParams } from "../ticket";
@@ -24,10 +25,11 @@ export interface LiveBrowserProps {
   interactive?: boolean;
   onTap?: (x: number, y: number) => void;
   onScroll?: (dy: number) => void;
+  onKey?: (key: string, text?: string) => void;
   className?: string;
 }
 
-export function LiveBrowser({ thread, title, interactive, onTap, onScroll, className }: LiveBrowserProps) {
+export function LiveBrowser({ thread, title, interactive, onTap, onScroll, onKey, className }: LiveBrowserProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [loaded, setLoaded] = useState(false);
   const [gone, setGone] = useState(false);
@@ -48,7 +50,7 @@ export function LiveBrowser({ thread, title, interactive, onTap, onScroll, class
   };
 
   return (
-    <div className={className}>
+    <div className={cx(className, interactive && "h-full min-h-0")}>
       {gone ? (
         <div className="flex aspect-[16/10] flex-col items-center justify-center gap-1 text-muted">
           <span className="text-[12.5px]">The live view stopped.</span>
@@ -83,9 +85,23 @@ export function LiveBrowser({ thread, title, interactive, onTap, onScroll, class
             e.preventDefault();
             onScroll(e.deltaY);
           }}
+          onKeyDown={(e) => {
+            if (!interactive || !onKey) return;
+            if (e.metaKey || e.ctrlKey || e.altKey) return; // let the app keep its shortcuts
+            const printable = e.key.length === 1;
+            if (printable) {
+              e.preventDefault();
+              onKey(e.key, e.key);
+            } else if (e.key === "Enter" || e.key === "Backspace" || e.key === "Tab" ||
+                       e.key.startsWith("Arrow") || e.key === "Escape") {
+              e.preventDefault();
+              onKey(e.key);
+            }
+          }}
+          tabIndex={interactive ? 0 : undefined}
           className={
             "block w-full select-none rounded-2xl border border-border bg-black " +
-            (interactive ? "cursor-crosshair " : "") +
+            (interactive ? "h-full max-h-full cursor-crosshair object-contain " : "") +
             (loaded ? "" : "opacity-70")
           }
         />
